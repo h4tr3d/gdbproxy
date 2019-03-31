@@ -73,12 +73,7 @@ private:
     asio::ip::tcp::socket m_target_socket;
     asio::ip::tcp::resolver resolver_;
 
-    bool proxy_closed;
-    bool isPersistent;
-    int32_t RespLen;
-    int32_t RespReaded;
 
-    std::array<char, 8192> sbuffer;
     data_buffer<8192> client_buffer;
     data_buffer<8192> remote_buffer;
 
@@ -89,12 +84,6 @@ private:
     std::string fPort = "3002";
     
     bool isOpened = false;
-
-    std::string fReq;
-
-    typedef std::unordered_map<std::string,std::string> headersMap;
-    headersMap reqHeaders, respHeaders;
-
-    void parseHeaders(const std::string& h, headersMap& hm);
+    bool isFirst = true;
 };
 

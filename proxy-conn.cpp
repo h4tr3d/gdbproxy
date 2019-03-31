@@ -1,5 +1,7 @@
 #include "proxy-conn.hpp"
 
+#define SYNC_TRANSFER
+
 /** 
  * 
  * 
@@ -10,8 +12,6 @@ connection::connection(asio::io_service& io_service)
       m_client_socket(io_service),
       m_target_socket(io_service),
       resolver_(io_service),
-      proxy_closed(false),
-      isPersistent(false),
       isOpened(false) 
 {
 }
@@ -73,7 +73,9 @@ void connection::handle_connect(const std::error_code& err,
         isOpened = true;
 
         start_client_read();
+#ifndef SYNC_TRANSFER
         start_remote_read();
+#endif
 
     } else if (endpoint_iterator != asio::ip::tcp::resolver::iterator()) {
         m_target_socket.close();
@@ -91,6 +93,7 @@ void connection::handle_connect(const std::error_code& err,
 
 void connection::start_client_read()
 {
+    client_buffer.reset();
     auto conn = shared_from_this();
     asio::async_read(m_client_socket, asio::buffer(client_buffer.data), asio::transfer_at_least(1),
                      [conn,this](const std::error_code& ec, size_t readed) {
@@ -132,7 +135,6 @@ void connection::process_client_data()
         start_remote_write();
     } else if (client_buffer.empty()) {
         // Request data from client
-        client_buffer.reset();
         start_client_read();
     }
 }
@@ -147,10 +149,18 @@ void connection::start_remote_write()
                           // remote write done
                           assert(transfered == total && "Unhandled case, when server receive less data than was sent");
                           if (!ec) {
+                              const auto is_ack = from_client.type() == gdb_packet_type::ack;
                             from_client.reset();
                             if (client_buffer.empty()) {
-                                client_buffer.reset();
+#ifndef SYNC_TRANSFER
                                 start_client_read();
+#else
+                                // always start read from client too: vCont does not receive response
+                                // but client can send Break
+                                start_client_read();
+                                if (!is_ack)
+                                    start_remote_read();
+#endif
                             } else {
                                 process_client_data();
                             }
@@ -162,6 +172,7 @@ void connection::start_remote_write()
 
 void connection::start_remote_read()
 {
+    remote_buffer.reset();
     auto conn = shared_from_this();
     asio::async_read(m_target_socket, asio::buffer(remote_buffer.data), asio::transfer_at_least(1),
                      [conn,this](const std::error_code& ec, size_t readed) {
@@ -177,7 +188,6 @@ void connection::start_remote_read()
                         } else {
                             shutdown();
                         }
-
                     });
 }
 
@@ -201,7 +211,6 @@ void connection::process_remote_data()
         start_client_write();
     } else if (remote_buffer.empty()) {
         // Request data from client
-        remote_buffer.reset();
         start_remote_read();
     }
 }
@@ -216,10 +225,17 @@ void connection::start_client_write()
                           // remote write done
                           assert(transfered == total && "Unhandled case, when server receive less data than was sent");
                           if (!ec) {
+                              const auto is_ack = from_remote.type() == gdb_packet_type::ack;
                             from_remote.reset();
                             if (remote_buffer.empty()) {
-                                remote_buffer.reset();
+#ifndef SYNC_TRANSFER
                                 start_remote_read();
+#else
+                                if (is_ack)
+                                    start_remote_read();
+                                else
+                                    start_client_read();
+#endif
                             } else {
                                 process_remote_data();
                             }
