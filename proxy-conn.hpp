@@ -5,6 +5,25 @@
 #include "common.h"
 #include "gdb-packet.h"
 
+template<size_t capacity>
+struct data_buffer
+{
+    std::array<char, capacity> data;
+    size_t size = 0;
+    size_t consumed = 0;
+
+    void reset() 
+    {
+        size = 0;
+        consumed = 0;
+    }
+
+    bool empty() const
+    {
+        return size == consumed;
+    }
+};
+
 class connection : public std::enable_shared_from_this<connection> {
 public:
     typedef std::shared_ptr<connection> pointer;
@@ -41,6 +60,9 @@ private:
     void start_remote_write();
     void start_remote_read();
 
+    void process_client_data();
+    void process_remote_data();
+
     /// Close both sockets: for browser and web-server
     void shutdown();
 
@@ -56,18 +78,12 @@ private:
     int32_t RespLen;
     int32_t RespReaded;
 
-    std::array<char, 8192> bbuffer;
     std::array<char, 8192> sbuffer;
-
-    std::array<char, 8192> target_send_buffer;
-    std::array<char, 8192> client_recv_buffer;
+    data_buffer<8192> client_buffer;
+    data_buffer<8192> remote_buffer;
 
     gdb_packet from_client;
-    gdb_packet from_target;
-    std::deque<gdb_packet> to_server;
-    std::deque<gdb_packet> to_client;
-    std::deque<gdb_packet> to_server_process;
-    std::deque<gdb_packet> to_client_process;
+    gdb_packet from_remote;
 
     std::string fServer = "localhost";
     std::string fPort = "3002";

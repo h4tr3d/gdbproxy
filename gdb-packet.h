@@ -56,6 +56,16 @@ public:
         return std::string_view(m_data.data(), m_data.size());
     }
 
+    const char* raw_ptr() const 
+    {
+        return m_data.data();
+    }
+
+    size_t raw_size() const
+    {
+        return m_data.size();
+    }
+
     bool is_invalid() const
     {
         return m_state == state::invalid;
@@ -116,7 +126,7 @@ public:
             }
         }
 
-        return orig_size - size;
+        return orig_size - size - 1;
     }
 
     void reset() noexcept

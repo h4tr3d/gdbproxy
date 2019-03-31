@@ -92,65 +92,68 @@ void connection::handle_connect(const std::error_code& err,
 void connection::start_client_read()
 {
     auto conn = shared_from_this();
-    asio::async_read(m_client_socket, asio::buffer(client_recv_buffer), asio::transfer_at_least(1),
+    asio::async_read(m_client_socket, asio::buffer(client_buffer.data), asio::transfer_at_least(1),
                      [conn,this](const std::error_code& ec, size_t readed) {
                         // client read done
-                        client_recv_buffer[readed] = 0x00;
-                        std::clog << "<- "   << client_recv_buffer.data() << std::endl;
+                        
+                        client_buffer.data[readed] = 0x00;
+                        client_buffer.size = readed;
+                        client_buffer.consumed = 0;
+
+                        std::clog << "<- " << std::string_view(client_buffer.data.data(), readed) << std::endl;
+
                         if (!ec && readed) {
-                            
-                            // process packets
-                            const auto was_empty = to_server.empty();
-                            auto size = readed;
-                            auto total = 0;
-                            while (size > 0) {
-                                auto const consumed = from_client.push_back(client_recv_buffer.data() + total, readed - total);
-                                total += consumed;
-                                size -= consumed;
-
-                                std::clog << "consumed: " << consumed << std::endl;
-
-                                if (from_client.is_complete()) {
-                                    std::clog << " client pkt: " << from_client.raw_data() << std::endl;
-                                    to_server.push_back(std::move(from_client));
-                                    from_client.reset();
-                                }
-                            }
-
-                            if (to_server.empty() || !from_client.is_invalid()) {
-                                start_client_read();
-                            }
-                            
-                            if (was_empty) {
-                                start_remote_write();
-                            }
-                        }
-                        else
+                            process_client_data();
+                        } else {
                             shutdown();
+                        }
 
                     });
+}
 
+void connection::process_client_data()
+{
+    // process packets
+    auto const consumed = from_client.push_back(
+        client_buffer.data.data() + client_buffer.consumed,
+        client_buffer.size - client_buffer.consumed
+    );
+    client_buffer.consumed += consumed;
+
+    assert(consumed && "Invalid packet data?");
+    if (consumed == 0) {
+        // Invalid packet data?
+    }
+
+    if (from_client.is_complete()) {
+        // TBD: handle complete handle, process it and if needed - sent to the target
+
+        // Send packet to target
+        start_remote_write();
+    } else if (client_buffer.empty()) {
+        // Request data from client
+        client_buffer.reset();
+        start_client_read();
+    }
 }
 
 void connection::start_remote_write()
 {
     auto conn = shared_from_this();
-
-    to_server_process = std::move(to_server);
-
-    std::vector<asio::const_buffer> buffers;
-    size_t total = 0;
-    for (auto const& pkt : to_server_process) {
-        buffers.push_back(asio::buffer(pkt.raw_data()));
-        total += pkt.raw_data().size();
-    }
-
-    asio::async_write(m_target_socket, buffers,
+    auto const total = from_client.raw_data().size();
+    asio::async_write(m_target_socket, asio::buffer(from_client.raw_data()),
                       [conn,this,total](const std::error_code& ec, size_t transfered) {
                           std::clog << "transfered to target: " << transfered << " / " << total << std::endl;
                           // remote write done
+                          assert(transfered == total && "Unhandled case, when server receive less data than was sent");
                           if (!ec) {
-                            start_client_read();
+                            from_client.reset();
+                            if (client_buffer.empty()) {
+                                client_buffer.reset();
+                                start_client_read();
+                            } else {
+                                process_client_data();
+                            }
                           } else {
                             shutdown();
                           }
@@ -160,29 +163,71 @@ void connection::start_remote_write()
 void connection::start_remote_read()
 {
     auto conn = shared_from_this();
-    sbuffer.fill('\0');
-    asio::async_read(m_target_socket, asio::buffer(sbuffer), asio::transfer_at_least(1),
-                     [conn, this](const std::error_code& ec, size_t readed) {
-                        // remote read done
-                        std::clog << "-> "   << sbuffer.data() << std::endl;
-                        if (!ec && readed)
-                            start_client_write();
-                        else
+    asio::async_read(m_target_socket, asio::buffer(remote_buffer.data), asio::transfer_at_least(1),
+                     [conn,this](const std::error_code& ec, size_t readed) {
+                        // client read done
+                        
+                        remote_buffer.data[readed] = 0x00;
+                        remote_buffer.size = readed;
+                        remote_buffer.consumed = 0;
+
+                        std::clog << "-> " << std::string_view(remote_buffer.data.data(), readed) << std::endl;
+                        if (!ec && readed) {
+                            process_remote_data();
+                        } else {
                             shutdown();
+                        }
+
                     });
+}
+
+void connection::process_remote_data()
+{
+    // process packets
+    auto const consumed = from_remote.push_back(
+        remote_buffer.data.data() + remote_buffer.consumed,
+        remote_buffer.size - remote_buffer.consumed
+    );
+    remote_buffer.consumed += consumed;
+
+    assert(consumed && "Invalid packet data?");
+    if (consumed == 0) {
+        // Invalid packet data?
+    }
+
+    if (from_remote.is_complete()) {
+        // TBD: handle response packet, process it and if needed - sent to the target
+        // Send packet to target
+        start_client_write();
+    } else if (remote_buffer.empty()) {
+        // Request data from client
+        remote_buffer.reset();
+        start_remote_read();
+    }
 }
 
 void connection::start_client_write()
 {
     auto conn = shared_from_this();
-    asio::async_write(m_client_socket, asio::buffer(sbuffer),
-                      [conn, this](const std::error_code& ec, size_t transfered) {
-                            // remote write done
-                            if (!ec)
+    auto const total = from_remote.raw_data().size();
+    asio::async_write(m_client_socket, asio::buffer(from_remote.raw_data()),
+                      [conn,this,total](const std::error_code& ec, size_t transfered) {
+                          std::clog << "transfered to client: " << transfered << " / " << total << std::endl;
+                          // remote write done
+                          assert(transfered == total && "Unhandled case, when server receive less data than was sent");
+                          if (!ec) {
+                            from_remote.reset();
+                            if (remote_buffer.empty()) {
+                                remote_buffer.reset();
                                 start_remote_read();
-                            else
-                                shutdown();
+                            } else {
+                                process_remote_data();
+                            }
+                          } else {
+                            shutdown();
+                          }
                       });
+
 }
 
 /** 
