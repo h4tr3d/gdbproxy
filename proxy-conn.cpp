@@ -5,13 +5,14 @@
  * 
  * @param io_service 
  */
-connection::connection(asio::io_service& io_service) : io_service_(io_service),
-                           bsocket_(io_service),
-                           ssocket_(io_service),
-                           resolver_(io_service),
-                           proxy_closed(false),
-                           isPersistent(false),
-                           isOpened(false) 
+connection::connection(asio::io_service& io_service) 
+    : io_service_(io_service),
+      m_client_socket(io_service),
+      m_target_socket(io_service),
+      resolver_(io_service),
+      proxy_closed(false),
+      isPersistent(false),
+      isOpened(false) 
 {
 }
 
@@ -75,12 +76,12 @@ void connection::handle_connect(const std::error_code& err,
         start_remote_read();
 
     } else if (endpoint_iterator != asio::ip::tcp::resolver::iterator()) {
-        ssocket_.close();
+        m_target_socket.close();
         asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
         std::clog << "endpoint: " << endpoint << std::endl;
         auto conn = shared_from_this();
         ++endpoint_iterator;
-        ssocket_.async_connect(endpoint, [this, conn, endpoint_iterator](const std::error_code& ec) {
+        m_target_socket.async_connect(endpoint, [this, conn, endpoint_iterator](const std::error_code& ec) {
             handle_connect(ec, endpoint_iterator, false);
         });
     } else {
@@ -91,13 +92,39 @@ void connection::handle_connect(const std::error_code& err,
 void connection::start_client_read()
 {
     auto conn = shared_from_this();
-    bbuffer.fill('\0');
-    asio::async_read(bsocket_, asio::buffer(bbuffer), asio::transfer_at_least(1),
+    asio::async_read(m_client_socket, asio::buffer(client_recv_buffer), asio::transfer_at_least(1),
                      [conn,this](const std::error_code& ec, size_t readed) {
                         // client read done
-                        std::clog << "<- "   << bbuffer.data() << std::endl;
-                        if (!ec && readed) 
-                            start_remote_write();
+                        client_recv_buffer[readed] = 0x00;
+                        std::clog << "<- "   << client_recv_buffer.data() << std::endl;
+                        if (!ec && readed) {
+                            
+                            // process packets
+                            const auto was_empty = to_server.empty();
+                            auto size = readed;
+                            auto total = 0;
+                            while (size > 0) {
+                                auto const consumed = from_client.push_back(client_recv_buffer.data() + total, readed - total);
+                                total += consumed;
+                                size -= consumed;
+
+                                std::clog << "consumed: " << consumed << std::endl;
+
+                                if (from_client.is_complete()) {
+                                    std::clog << " client pkt: " << from_client.raw_data() << std::endl;
+                                    to_server.push_back(std::move(from_client));
+                                    from_client.reset();
+                                }
+                            }
+
+                            if (to_server.empty() || !from_client.is_invalid()) {
+                                start_client_read();
+                            }
+                            
+                            if (was_empty) {
+                                start_remote_write();
+                            }
+                        }
                         else
                             shutdown();
 
@@ -108,13 +135,25 @@ void connection::start_client_read()
 void connection::start_remote_write()
 {
     auto conn = shared_from_this();
-    asio::async_write(ssocket_, asio::buffer(bbuffer),
-                      [conn,this](const std::error_code& ec, size_t transfered) {
+
+    to_server_process = std::move(to_server);
+
+    std::vector<asio::const_buffer> buffers;
+    size_t total = 0;
+    for (auto const& pkt : to_server_process) {
+        buffers.push_back(asio::buffer(pkt.raw_data()));
+        total += pkt.raw_data().size();
+    }
+
+    asio::async_write(m_target_socket, buffers,
+                      [conn,this,total](const std::error_code& ec, size_t transfered) {
+                          std::clog << "transfered to target: " << transfered << " / " << total << std::endl;
                           // remote write done
-                          if (!ec)
+                          if (!ec) {
                             start_client_read();
-                          else
+                          } else {
                             shutdown();
+                          }
                       });
 }
 
@@ -122,7 +161,7 @@ void connection::start_remote_read()
 {
     auto conn = shared_from_this();
     sbuffer.fill('\0');
-    asio::async_read(ssocket_, asio::buffer(sbuffer), asio::transfer_at_least(1),
+    asio::async_read(m_target_socket, asio::buffer(sbuffer), asio::transfer_at_least(1),
                      [conn, this](const std::error_code& ec, size_t readed) {
                         // remote read done
                         std::clog << "-> "   << sbuffer.data() << std::endl;
@@ -136,7 +175,7 @@ void connection::start_remote_read()
 void connection::start_client_write()
 {
     auto conn = shared_from_this();
-    asio::async_write(bsocket_, asio::buffer(sbuffer),
+    asio::async_write(m_client_socket, asio::buffer(sbuffer),
                       [conn, this](const std::error_code& ec, size_t transfered) {
                             // remote write done
                             if (!ec)
@@ -152,6 +191,6 @@ void connection::start_client_write()
  */
 void connection::shutdown() 
 {
-  ssocket_.close();
-  bsocket_.close();
+  m_target_socket.close();
+  m_client_socket.close();
 }

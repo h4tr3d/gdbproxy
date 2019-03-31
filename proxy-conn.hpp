@@ -1,8 +1,9 @@
 #pragma once
 
-#include "common.h"
-
 #include <unordered_map>
+
+#include "common.h"
+#include "gdb-packet.h"
 
 class connection : public std::enable_shared_from_this<connection> {
 public:
@@ -18,7 +19,7 @@ public:
     }
 
     asio::ip::tcp::socket& socket() {
-        return bsocket_;
+        return m_client_socket;
     }
 
     /// Start read data of request from browser
@@ -44,10 +45,10 @@ private:
     void shutdown();
 
 
+    asio::io_service&     io_service_;
+    asio::ip::tcp::socket m_client_socket;
 
-    asio::io_service& io_service_;
-    asio::ip::tcp::socket bsocket_;
-    asio::ip::tcp::socket ssocket_;
+    asio::ip::tcp::socket m_target_socket;
     asio::ip::tcp::resolver resolver_;
 
     bool proxy_closed;
@@ -57,6 +58,16 @@ private:
 
     std::array<char, 8192> bbuffer;
     std::array<char, 8192> sbuffer;
+
+    std::array<char, 8192> target_send_buffer;
+    std::array<char, 8192> client_recv_buffer;
+
+    gdb_packet from_client;
+    gdb_packet from_target;
+    std::deque<gdb_packet> to_server;
+    std::deque<gdb_packet> to_client;
+    std::deque<gdb_packet> to_server_process;
+    std::deque<gdb_packet> to_client_process;
 
     std::string fServer = "localhost";
     std::string fPort = "3002";
