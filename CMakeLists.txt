@@ -27,6 +27,7 @@ set (SOURCES
   proxy-server.cpp
   proxy-conn.cpp
   gdb-packet.cpp
+  gdb_packets.cpp
   target.cpp
   target-factory.cpp
   target_mb_freertos.cpp)
