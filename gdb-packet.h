@@ -37,6 +37,11 @@ public:
         return gdb_packet_type::brk;
     }
 
+    static gdb_packet packet_data()
+    {
+        return gdb_packet_type::dat;
+    }
+
     static gdb_packet packet_empty()
     {
         gdb_packet pkt(gdb_packet_type::dat);
@@ -67,6 +72,7 @@ public:
     state state() const noexcept;
 
     size_t parse(const char *data, size_t size);
+    size_t parse(const char *data);
 
     bool finalize();
 

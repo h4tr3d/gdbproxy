@@ -2,6 +2,8 @@
 #include <iomanip>
 #include <string>
 
+#include <cstring>
+
 #include "gdb-packet.h"
 
 gdb_packet::~gdb_packet() = default;
@@ -145,6 +147,11 @@ size_t gdb_packet::parse(const char *data, size_t size)
     }
 
     return orig_size - size - 1;
+}
+
+size_t gdb_packet::parse(const char *data)
+{
+    return parse(data, strlen(data));
 }
 
 bool gdb_packet::finalize()
