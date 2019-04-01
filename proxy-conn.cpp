@@ -1,7 +1,5 @@
 #include "proxy-conn.hpp"
 
-//#define SYNC_TRANSFER
-
 /** 
  * 
  * 
@@ -110,8 +108,23 @@ void connection::shutdown()
 
 bool connection::on_request(const gdb_packet& pkt)
 {
-    if (pkt.type() == gdb_packet_type::generic) {
+    if (pkt.type() == gdb_packet_type::dat) {
         std::clog << "req: " << ++seq << std::endl;
+
+#if 0
+        //if (seq > 4)
+        {
+            const static char raw[] = R"#($qXfer:threads:read::0,1000#92)#";
+            gdb_packet internal_pkt;
+            internal_pkt.parse(raw, sizeof(raw));
+
+            push_internal_request(std::move(internal_pkt), [this](auto &req, auto& resp) {
+                std::clog << "response to internal request:\n"
+                          << "  <- " << req.raw_data() << '\n'
+                          << "  -> " << resp.raw_data() << std::endl;
+            });
+        }
+#endif
     }
 
     return false;
@@ -119,17 +132,50 @@ bool connection::on_request(const gdb_packet& pkt)
 
 bool connection::on_response(const gdb_packet& pkt)
 {
-    if (pkt.type() == gdb_packet_type::generic) {
-        std::clog << "rsp: " << seq << std::endl;
+    auto &requests = m_requests_channel.transfers_queue();
+    auto const& req = requests.front();
+    auto const& req_pkt = req.pkt;
 
-        auto &queue = m_requests_channel.transfers_queue();
-        auto const& req = queue.front();
-        auto const& req_pkt = req.pkt;
+    std::clog << "rsp: " << "type=" << (int)pkt.type() << " internal=" << req.is_internal << std::endl;
 
+    if (pkt.type() == gdb_packet_type::dat) {
+        std::clog << "rsp: " << seq << " (count:" << m_requests_channel.transfers_queue().size() << ")" << std::endl;
         std::clog << "rsp to the req: " << req_pkt.raw_data() << std::endl;
-        queue.pop_front();
+
+        // Check ACK mode
+        if (req_pkt.data().substr(0, 15) == "QStartNoAckMode") {
+            if (pkt.data().substr(0, 2) == "OK") {
+                m_ack_mode = false;
+            }
+        }
+
+        if (req.on_response) {
+            req.on_response(req_pkt, pkt);
+            if (req.is_internal) {
+                if (m_ack_mode) {
+                    push_internal_request(gdb_packet_type::ack);
+                }
+            }
+        }
+
+        requests.pop_front();
+
+        if (req.is_internal)
+            return true;
+    } else if (pkt.type() == gdb_packet_type::ack) {
+        if (req.is_internal)
+            return true;
     }
     return false;
+}
+
+void connection::push_internal_request(gdb_packet &&req, transfer::on_response_cb cb)
+{
+    m_requests_channel.start_write(shared_from_this(), {std::move(req), transfer::internal(), std::move(cb)});
+    if (m_ack_mode) {
+        // HACK: if we want to Nak internal request, we must not sent immediatelly another request
+        m_requests_channel.start_write(shared_from_this(), {gdb_packet(gdb_packet_type::ack), transfer::internal()});
+    }
 }
 
 //
@@ -177,7 +223,7 @@ void connection::channel::start_write(std::shared_ptr<connection> con, transfer 
                         assert(transfered == total && "Unhandled case, when server receive less data than was sent");
                         if (!ec) {
                             // Data packets must be cleaned at the Response handler
-                            if (pkt.type() != gdb_packet_type::generic || m_dir == responses || !m_handler)
+                            if (pkt.type() != gdb_packet_type::dat || m_dir == responses || !m_handler)
                                 m_transfers.pop_front();
                           } else {
                             con->shutdown();

@@ -25,20 +25,25 @@ struct data_buffer
 };
 
 // Only Data packets
-struct transfer_internal {};
 struct transfer
 {
-    transfer(gdb_packet&& pkt)
-        : pkt(std::move(pkt))
+    struct internal {};
+    using on_response_cb = std::function<void(const gdb_packet& request, const gdb_packet& response)>;
+
+    transfer(gdb_packet&& pkt, on_response_cb&& cb = on_response_cb())
+        : pkt(std::move(pkt)),
+          on_response(std::move(cb))
     {}
 
-    transfer(gdb_packet&& pkt, transfer_internal)
+    transfer(gdb_packet&& pkt, internal, on_response_cb&& cb = on_response_cb())
         : pkt(std::move(pkt)),
-          is_internal(true)
+          is_internal(true),
+          on_response(std::move(cb))
     {}
 
     gdb_packet pkt;
     bool const is_internal = false;
+    on_response_cb on_response;
 };
 
 
@@ -120,6 +125,8 @@ private:
     bool on_request(const gdb_packet& pkt);
     bool on_response(const gdb_packet& pkt);
 
+    void push_internal_request(gdb_packet&& req, transfer::on_response_cb cb = transfer::on_response_cb());
+
     asio::io_service&     io_service_;
     asio::ip::tcp::socket m_client_socket;
     asio::ip::tcp::socket m_target_socket;
@@ -132,5 +139,7 @@ private:
     std::string fPort = "3002";
     
     size_t seq = 0;
+
+    bool m_ack_mode = true;
 };
 
