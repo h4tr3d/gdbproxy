@@ -6,11 +6,10 @@
 enum class gdb_packet_type
 {
     invalid,
-    ack,
-    nak,
-    brk,
-    generic,
-    ext,
+    ack, // '+'
+    nak, // '-'
+    brk, // '\03'
+    dat, // "$packet-data#cc", where CC - two hex digit CRC
 };
 
 class gdb_packet
@@ -23,119 +22,59 @@ public:
         complete
     };
 
+    static gdb_packet packet_ack()
+    {
+        return gdb_packet_type::ack;
+    }
+
+    static gdb_packet packet_nak()
+    {
+        return gdb_packet_type::nak;
+    }
+
+    static gdb_packet packet_break()
+    {
+        return gdb_packet_type::brk;
+    }
+
+    static gdb_packet packet_empty()
+    {
+        gdb_packet pkt(gdb_packet_type::dat);
+        pkt.finalize();
+        std::clog << "empty packet: " << pkt.raw_data() << std::endl;
+        return pkt;
+    }
+
+
+    gdb_packet() = default;
+
+    gdb_packet(gdb_packet_type type) noexcept;
+
     ~gdb_packet();
 
-    gdb_packet_type type() const noexcept
-    {
-        if (m_data.size()) {
-            switch (m_data[0]) {
-                case '$':
-                    return gdb_packet_type::generic;
-                case '+':
-                    return gdb_packet_type::ack;
-                case '-':
-                    return gdb_packet_type::nak;
-                case '\03':
-                    return gdb_packet_type::brk;
-            }
-        }
-        return gdb_packet_type::invalid;
-    }
+    gdb_packet_type type() const noexcept;
 
-    bool is_complete() const noexcept
-    {
-        return m_state == state::complete;
-    }
+    bool is_complete() const noexcept;
 
-    std::string_view data() const 
-    {
-        return std::string_view(m_data.data() + 1, m_data.size() - 1);
-    }
+    std::string_view data() const noexcept;
 
-    std::string_view raw_data() const
-    {
-        return std::string_view(m_data.data(), m_data.size());
-    }
+    std::string_view raw_data() const noexcept;
 
-    const char* raw_ptr() const 
-    {
-        return m_data.data();
-    }
+    uint8_t data_crc() const;
+    uint8_t calc_crc() const noexcept;
 
-    size_t raw_size() const
-    {
-        return m_data.size();
-    }
+    bool is_invalid() const noexcept;
 
-    bool is_invalid() const
-    {
-        return m_state == state::invalid;
-    }
+    state state() const noexcept;
 
-    state state() const noexcept
-    {
-        return m_state;
-    }
+    size_t parse(const char *data, size_t size);
 
-    size_t parse(const char *data, size_t size)
-    {
-        if (m_data.capacity() < m_data.size() + size) {
-            m_data.reserve(m_data.size() + size);
-        }
+    bool finalize();
 
-        const auto orig_size = size;
-
-        // check packet start
-        if (is_invalid()) {
-            switch (*data) {
-                case '$':
-                case '+':
-                case '-':
-                case '\03':
-                    m_state = state::data;
-                    m_data.push_back(*data++);
-                    size--;
-                    // Ack and Nak packets follows without data
-                    if (m_data[0] != '$') {
-                        m_state = state::complete;
-                        return 1;
-                    }
-                break;
-                default:
-                    return 0;
-            }
-        }
-
-        while (size --> 0) {
-            const auto ch = *data++;
-            m_data.push_back(ch);
-
-            switch (m_state) {
-                case state::data:
-                    if (ch == '#') {
-                        m_state = state::crc;
-                    }
-                    break;
-            
-                case state::crc:
-                    if (m_data[m_data.size() - 2 - 1] == '#') {
-                        m_state = state::complete;
-                        return orig_size - size;
-                    }
-                    break;
-            }
-        }
-
-        return orig_size - size - 1;
-    }
-
-    void reset() noexcept
-    {
-        m_data.clear();
-        m_state = state::invalid;
-    }
+    void reset() noexcept;
 
 protected:
     std::vector<char> m_data;
     enum state m_state = state::invalid;
+    uint8_t m_csum = 0;
 };
