@@ -9,7 +9,7 @@ typedef std::deque<io_service_ptr> ios_deque;
 
 class server {
 public:
-	server(const ios_deque& io_services, int port=10001, std::string interface_address = "");
+    server(const ios_deque& io_services, std::string_view target, int port=10001, std::string interface_address = "");
 
 private:
 	void start_accept();
@@ -18,5 +18,7 @@ private:
 	ios_deque io_services_;
 	const asio::ip::tcp::endpoint endpoint_;   /**< object, that points to the connection endpoint */
 	asio::ip::tcp::acceptor acceptor_;         /**< object, that accepts new connections */
+
+    std::string_view m_target_name;
 };
 

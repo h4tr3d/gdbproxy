@@ -1,11 +1,13 @@
 #include "proxy-conn.hpp"
 
+#include "target_mb_freertos.h"
+
 /** 
  * 
  * 
  * @param io_service 
  */
-connection::connection(asio::io_service& io_service) 
+connection::connection(asio::io_service& io_service, std::string_view /*target*/)
     : io_service_(io_service),
       m_client_socket(io_service),
       m_target_socket(io_service),
@@ -13,6 +15,8 @@ connection::connection(asio::io_service& io_service)
       m_requests_channel(io_service, m_client_socket, m_target_socket, channel::requests),
       m_responses_channel(io_service, m_target_socket, m_client_socket, channel::responses)
 {
+    // TBD
+    m_target = std::make_unique<target_mb_freertos>(*this);
 
     m_requests_channel.set_packet_handler([this](const gdb_packet& pkt) {
         return on_request(pkt);
@@ -110,6 +114,10 @@ bool connection::on_request(const gdb_packet& pkt)
 {
     if (pkt.type() == gdb_packet_type::dat) {
         std::clog << "req: " << ++seq << std::endl;
+
+        if (m_target) {
+            return m_target->process_request(pkt);
+        }
 
 #if 0
         //if (seq > 4)

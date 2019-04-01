@@ -41,7 +41,6 @@ public:
     {
         gdb_packet pkt(gdb_packet_type::dat);
         pkt.finalize();
-        std::clog << "empty packet: " << pkt.raw_data() << std::endl;
         return pkt;
     }
 

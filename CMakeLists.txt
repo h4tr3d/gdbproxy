@@ -26,7 +26,10 @@ set (SOURCES
   proxy.cpp
   proxy-server.cpp
   proxy-conn.cpp
-  gdb-packet.cpp)
+  gdb-packet.cpp
+  target.cpp
+  target-factory.cpp
+  target_mb_freertos.cpp)
 
 add_executable(gdbproxy ${SOURCES})
 target_link_libraries(gdbproxy Threads::Threads)

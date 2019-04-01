@@ -1,9 +1,10 @@
 #pragma once
 
-#include <unordered_map>
+#include <memory>
 
 #include "common.h"
 #include "gdb-packet.h"
+#include "target.h"
 
 template<size_t capacity>
 struct data_buffer
@@ -52,8 +53,8 @@ public:
     typedef std::shared_ptr<connection> pointer;
     friend class channel;
 
-    static pointer create(asio::io_service& io_service) {
-        return pointer(new connection(io_service));
+    static pointer create(asio::io_service& io_service, std::string_view target) {
+        return pointer(new connection(io_service, target));
     }
 
     ~connection() 
@@ -110,7 +111,7 @@ private:
         direction m_dir = requests;
     };
 
-    connection(asio::io_service& io_service);
+    connection(asio::io_service& io_service, std::string_view target);
     
     /// Start connecting to the web-server, initially to resolve the DNS-name of Web server into the IP address
     void start_connect();
@@ -141,5 +142,7 @@ private:
     size_t seq = 0;
 
     bool m_ack_mode = true;
+
+    std::unique_ptr<target> m_target;
 };
 

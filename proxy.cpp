@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
 				ios->run();
 			});
 		}
-		server server(io_services, port, interface_address);
+        server server(io_services, "target_mb_freertos", port, interface_address);
 		
 		for (auto & thr : workers) {
 			if (thr.joinable())
