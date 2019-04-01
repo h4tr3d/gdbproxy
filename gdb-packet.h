@@ -5,6 +5,7 @@
 
 enum class gdb_packet_type
 {
+    invalid,
     ack,
     nak,
     brk,
@@ -22,9 +23,9 @@ public:
         complete
     };
 
-    virtual ~gdb_packet();
+    ~gdb_packet();
 
-    virtual gdb_packet_type type() const noexcept
+    gdb_packet_type type() const noexcept
     {
         if (m_data.size()) {
             switch (m_data[0]) {
@@ -38,7 +39,7 @@ public:
                     return gdb_packet_type::brk;
             }
         }
-        return gdb_packet_type::generic;
+        return gdb_packet_type::invalid;
     }
 
     bool is_complete() const noexcept
@@ -76,9 +77,8 @@ public:
         return m_state;
     }
 
-    size_t push_back(const char *data, size_t size)
+    size_t parse(const char *data, size_t size)
     {
-        //m_data.push_back(data, size);
         if (m_data.capacity() < m_data.size() + size) {
             m_data.reserve(m_data.size() + size);
         }
