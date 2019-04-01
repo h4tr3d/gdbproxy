@@ -186,6 +186,20 @@ void connection::push_internal_request(gdb_packet &&req, transfer::on_response_c
     }
 }
 
+void connection::push_request(gdb_packet &&req, transfer::on_response_cb cb)
+{
+    m_requests_channel.start_write(shared_from_this(), {std::move(req), std::move(cb)});
+    if (m_ack_mode) {
+        // HACK: if we want to Nak internal request, we must not sent immediatelly another request
+        m_requests_channel.start_write(shared_from_this(), {gdb_packet(gdb_packet_type::ack)});
+    }
+}
+
+void connection::push_internal_response(gdb_packet &&req, transfer::on_response_cb cb)
+{
+    m_responses_channel.start_write(shared_from_this(), {std::move(req), transfer::internal(), std::move(cb)});
+}
+
 //
 // Channel
 //

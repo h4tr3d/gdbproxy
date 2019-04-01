@@ -69,6 +69,11 @@ public:
     /// Start read data of request from browser
     void start();
 
+    void push_internal_request(gdb_packet&& req, transfer::on_response_cb cb = transfer::on_response_cb());
+    void push_request(gdb_packet&& req, transfer::on_response_cb cb = transfer::on_response_cb());
+
+    void push_internal_response(gdb_packet&& req, transfer::on_response_cb cb = transfer::on_response_cb());
+
 private:
     struct channel
     {
@@ -125,8 +130,6 @@ private:
 
     bool on_request(const gdb_packet& pkt);
     bool on_response(const gdb_packet& pkt);
-
-    void push_internal_request(gdb_packet&& req, transfer::on_response_cb cb = transfer::on_response_cb());
 
     asio::io_service&     io_service_;
     asio::ip::tcp::socket m_client_socket;
