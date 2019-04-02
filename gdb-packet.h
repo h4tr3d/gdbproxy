@@ -18,6 +18,7 @@ public:
     enum class state {
         invalid,
         data,
+        run_length_coding,
         crc,
         complete
     };
@@ -53,8 +54,6 @@ public:
     gdb_packet() = default;
 
     gdb_packet(gdb_packet_type type) noexcept;
-
-    ~gdb_packet();
 
     gdb_packet_type type() const noexcept;
 

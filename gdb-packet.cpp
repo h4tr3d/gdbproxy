@@ -6,8 +6,6 @@
 
 #include "gdb-packet.h"
 
-gdb_packet::~gdb_packet() = default;
-
 gdb_packet::gdb_packet(gdb_packet_type type) noexcept
 {
     char data = '\0';
@@ -131,8 +129,35 @@ size_t gdb_packet::parse(const char *data, size_t size)
                     m_state = state::crc;
                 } else {
                     m_csum += ch;
+
+                    // run length coding
+                    if (ch == '*') {
+                        m_state = state::run_length_coding;
+                        // Remove '*' from buffer
+                        m_data.pop_back();
+                    }
                 }
                 break;
+
+            case state::run_length_coding:
+            {
+                // Remove counter char from buffer
+                m_csum += ch;
+                m_data.pop_back();
+                auto count = ch - ' ' + 3;
+                auto prev = m_data.back();
+
+                // to avoid extra memory reallocation
+                m_data.reserve(m_data.size() + size_t(count) - 2);
+
+                // Repeat last char
+                while (count --> 0) {
+                    m_data.push_back(prev);
+                }
+
+                m_state = state::data;
+                break;
+            }
 
             case state::crc:
                 if (m_data[m_data.size() - 2 - 1] == '#') {
