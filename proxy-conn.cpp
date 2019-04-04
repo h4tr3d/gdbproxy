@@ -231,9 +231,14 @@ void connection::channel::start_read(std::shared_ptr<connection> con)
 
 void connection::channel::start_write(std::shared_ptr<connection> con, transfer &&req)
 {
-    m_transfers.push_back(std::move(req));
+    auto const pkt_type = req.pkt.type();
+    // TBD: hack. Need a more clean solution
+    if (pkt_type == gdb_packet_type::brk)
+        m_transfers.push_front(std::move(req));
+    else
+        m_transfers.push_back(std::move(req));
 
-    auto const& process_req = m_transfers.back();
+    auto const& process_req = (pkt_type == gdb_packet_type::brk) ? m_transfers.front() : m_transfers.back();
     auto const& pkt = process_req.pkt;
     auto const total = pkt.raw_data().size();
 
