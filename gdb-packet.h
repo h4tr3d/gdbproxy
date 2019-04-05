@@ -70,8 +70,11 @@ public:
 
     state state() const noexcept;
 
+    void reserve(size_t capacity);
+
     size_t parse(const char *data, size_t size);
     size_t parse(const char *data);
+    size_t parse(std::string_view view);
 
     bool finalize();
 

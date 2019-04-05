@@ -162,9 +162,6 @@ size_t gdb_packet::parse(const char *data, size_t size)
             case state::crc:
                 if (m_data[m_data.size() - 2 - 1] == '#') {
                     m_state = state::complete;
-
-                    std::clog << "pkt crc " << std::hex << (int)m_csum << " / " << std::string_view(m_data.data() + m_data.size() - 2, 2) << std::endl;
-
                     return orig_size - size;
                 }
                 break;
@@ -178,6 +175,12 @@ size_t gdb_packet::parse(const char *data)
 {
     return parse(data, strlen(data));
 }
+
+size_t gdb_packet::parse(std::string_view view)
+{
+    return parse(view.data(), view.size());
+}
+
 
 bool gdb_packet::finalize()
 {
@@ -202,3 +205,9 @@ void gdb_packet::reset() noexcept
     m_state = state::invalid;
     m_csum = 0;
 }
+
+void gdb_packet::reserve(size_t capacity)
+{
+    m_data.reserve(capacity);
+}
+

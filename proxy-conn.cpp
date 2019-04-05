@@ -113,26 +113,11 @@ void connection::shutdown()
 bool connection::on_request(const gdb_packet& pkt)
 {
     if (pkt.type() == gdb_packet_type::dat) {
-        std::clog << "req: " << ++seq << std::endl;
+        ++seq;
 
         if (m_target) {
             return m_target->process_request(pkt);
         }
-
-#if 0
-        //if (seq > 4)
-        {
-            const static char raw[] = R"#($qXfer:threads:read::0,1000#92)#";
-            gdb_packet internal_pkt;
-            internal_pkt.parse(raw, sizeof(raw));
-
-            push_internal_request(std::move(internal_pkt), [this](auto &req, auto& resp) {
-                std::clog << "response to internal request:\n"
-                          << "  <- " << req.raw_data() << '\n'
-                          << "  -> " << resp.raw_data() << std::endl;
-            });
-        }
-#endif
     }
 
     return false;
@@ -161,7 +146,7 @@ bool connection::on_response(const gdb_packet& pkt)
             req.on_response(req_pkt, pkt);
             if (req.is_internal) {
                 if (m_ack_mode) {
-                    push_internal_request(gdb_packet_type::ack);
+                    //push_internal_request(gdb_packet_type::ack);
                 }
             }
         }
@@ -182,7 +167,7 @@ void connection::push_internal_request(gdb_packet &&req, transfer::on_response_c
     m_requests_channel.start_write(shared_from_this(), {std::move(req), transfer::internal(), std::move(cb)});
     if (m_ack_mode) {
         // HACK: if we want to Nak internal request, we must not sent immediatelly another request
-        m_requests_channel.start_write(shared_from_this(), {gdb_packet(gdb_packet_type::ack), transfer::internal()});
+        //m_requests_channel.start_write(shared_from_this(), {gdb_packet(gdb_packet_type::ack), transfer::internal()});
     }
 }
 
@@ -191,7 +176,7 @@ void connection::push_request(gdb_packet &&req, transfer::on_response_cb cb)
     m_requests_channel.start_write(shared_from_this(), {std::move(req), std::move(cb)});
     if (m_ack_mode) {
         // HACK: if we want to Nak internal request, we must not sent immediatelly another request
-        m_requests_channel.start_write(shared_from_this(), {gdb_packet(gdb_packet_type::ack)});
+        //m_requests_channel.start_write(shared_from_this(), {gdb_packet(gdb_packet_type::ack)});
     }
 }
 

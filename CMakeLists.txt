@@ -32,6 +32,12 @@ set (SOURCES
   target-factory.cpp
   target_mb_freertos.cpp)
 
+set (hex2bin_SOURCES hex2bin.cpp gdb_packets.cpp gdb-packet.cpp)
+
 add_executable(gdbproxy ${SOURCES})
 target_link_libraries(gdbproxy Threads::Threads)
 set_target_properties(gdbproxy PROPERTIES LINKER_LANGUAGE CXX)
+
+add_executable(hex2bin ${hex2bin_SOURCES})
+target_link_libraries(hex2bin Threads::Threads)
+set_target_properties(hex2bin PROPERTIES LINKER_LANGUAGE CXX)

@@ -46,11 +46,11 @@ size_t hex2bin(string_view hex, void *data, size_t size)
     return i;
 }
 
-size_t hex2bin(string_view hex, vector<uint8_t>& bin)
-{
-    bin.resize(hex.size()/2);
-    return hex2bin(hex, bin.data(), bin.size());
-}
+//size_t hex2bin(string_view hex, vector<uint8_t>& bin)
+//{
+//    bin.resize(hex.size()/2);
+//    return hex2bin(hex, bin.data(), bin.size());
+//}
 
 void bin2hex(const void *ptr, size_t size, string &str)
 {

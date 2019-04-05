@@ -25,6 +25,13 @@ enum symbols_values
 } // ::freertos
 
 
+// According GDB conventions
+static constexpr threadtcb_t THREAD_ID_ANY     =  0;
+static constexpr threadtcb_t THREAD_ID_ALL     = -1;
+// Internal
+static constexpr threadtcb_t THREAD_ID_INVALID = -2;
+static constexpr threadtcb_t THREAD_ID_CURRENT_EXECUTION = 1;
+
 // Stacking constants
 enum class stack_growth {
     down = -1,
@@ -69,6 +76,10 @@ private:
     bool handle_query_packet(const gdb_packet& pkt);
     bool handle_stop_reply_packets(const gdb_packet& pkt);
 
+    // Utils
+    std::string make_threadid(threadtcb_t tcb);
+    threadtcb_t parse_threadid(std::string_view threadid);
+
     // Processors
     void request_symbol();
 
@@ -89,6 +100,9 @@ private:
     void get_list_elem_next();
     // done
     void update_threads_done();
+
+    void make_empty_threading();
+    void add_current_execution();
 
     //
     // Thread retrivie registers list
@@ -111,7 +125,8 @@ private:
     // Threading
     struct thread_info
     {
-        threadid_t threadid = 0;
+        threadtcb_t thread_tcb = THREAD_ID_INVALID;
+        std::string thread_id;
         bool exists = false;
         std::string name;
         std::string extra;
@@ -127,8 +142,9 @@ private:
     };
     struct threading
     {
-        size_t     threads_count = 0;
-        threadid_t current_thread = 0;
+        size_t      threads_count = 0;
+        threadtcb_t current_thread_tcb = THREAD_ID_INVALID;
+        std::string current_thread_id;
         std::deque<thread_info> info;
 
         std::vector<thread_list> lists;
@@ -137,6 +153,9 @@ private:
         std::function<void()> done_cb;
     };
     threading m_threading;
+    std::string m_current_thread_id;
+
+    bool m_multiprocess = false;
 
     gdb_packet m_stop_reply_response;
 
