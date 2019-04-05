@@ -64,7 +64,7 @@ static constexpr threadid_t INVALID_THREAD_ID = 0u;
 #define portR2_OFFSET	120
 #define portCRITICAL_NESTING_OFFSET 124
 #define portMSR_OFFSET 128
-#define portFSR_OFFSET 132
+#define portFSR_OFFSET 132 // With FPU
 
 #define portREG_SIZE 32
 
@@ -241,11 +241,13 @@ static const size_t s_symbols_count = std::size(s_symbols_desc);
 
 static_assert (freertos::Symbol_Count == s_symbols_count, "Wrong count of FreeRTOS symbols");
 
-target_mb_freertos::target_mb_freertos(connection &conn)
+target_mb_freertos::target_mb_freertos(connection &conn, int argc, char **argv)
     : m_conn(conn)
 {
     // Threading will be updated after symbols resolving
-    // currently there is at least one "thread" - Current Execution
+    // currently there is at least one "thread" - Current Execution.
+    // This pseudo-thread must be kept. Target can fails when this
+    // execution was not selected.
     make_empty_threading();
 }
 
@@ -1009,4 +1011,5 @@ threadtcb_t target_mb_freertos::parse_threadid(std::string_view threadid)
         return THREAD_ID_INVALID;
     }
 }
+
 

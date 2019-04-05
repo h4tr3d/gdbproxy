@@ -53,8 +53,9 @@ public:
     typedef std::shared_ptr<connection> pointer;
     friend class channel;
 
-    static pointer create(asio::io_service& io_service, std::string_view target) {
-        return pointer(new connection(io_service, target));
+    static pointer
+    create(asio::io_service &io_service, std::string_view target, std::string_view remote_host, int remote_port) {
+        return pointer(new connection(io_service, target, remote_host, remote_port));
     }
 
     ~connection() 
@@ -116,7 +117,7 @@ private:
         direction m_dir = requests;
     };
 
-    connection(asio::io_service& io_service, std::string_view target);
+    connection(asio::io_service &io_service, std::string_view target, std::string_view remote_host, int remote_port);
     
     /// Start connecting to the web-server, initially to resolve the DNS-name of Web server into the IP address
     void start_connect();
@@ -140,7 +141,7 @@ private:
     channel m_responses_channel;
 
     std::string fServer = "localhost";
-    std::string fPort = "3002";
+    int fPort = 3002;
     
     size_t seq = 0;
 

@@ -7,16 +7,22 @@
  * 
  * @param io_service 
  */
-connection::connection(asio::io_service& io_service, std::string_view /*target*/)
+connection::connection(asio::io_service &io_service, std::string_view target, std::string_view remote_host, int remote_port)
     : io_service_(io_service),
       m_client_socket(io_service),
       m_target_socket(io_service),
       resolver_(io_service),
       m_requests_channel(io_service, m_client_socket, m_target_socket, channel::requests),
-      m_responses_channel(io_service, m_target_socket, m_client_socket, channel::responses)
+      m_responses_channel(io_service, m_target_socket, m_client_socket, channel::responses),
+      fServer(remote_host),
+      fPort(remote_port)
 {
     // TBD
-    m_target = std::make_unique<target_mb_freertos>(*this);
+    if (target == "mb_freertos") {
+        m_target = std::make_unique<target_mb_freertos>(*this, 0, nullptr);
+    } else {
+        throw std::system_error(std::make_error_code(std::errc::not_supported), "unknown target");
+    }
 
     m_requests_channel.set_packet_handler([this](const gdb_packet& pkt) {
         return on_request(pkt);
@@ -42,7 +48,7 @@ void connection::start()
  */
 void connection::start_connect() 
 {
-    asio::ip::tcp::resolver::query query(fServer, fPort);
+    asio::ip::tcp::resolver::query query(fServer, std::to_string(fPort));
     auto conn = shared_from_this();
     resolver_.async_resolve(query, [conn](const std::error_code& err, asio::ip::tcp::resolver::iterator endpoint_iterator) {
         std::clog << "resolve request handled\n";
