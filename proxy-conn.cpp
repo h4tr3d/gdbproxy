@@ -7,7 +7,8 @@
  * 
  * @param io_service 
  */
-connection::connection(asio::io_service &io_service, std::string_view target, std::string_view remote_host, int remote_port)
+connection::connection(asio::io_service &io_service, std::string_view target, const std::vector<char *> &options,
+                       std::string_view remote_host, int remote_port)
     : io_service_(io_service),
       m_client_socket(io_service),
       m_target_socket(io_service),
@@ -19,7 +20,7 @@ connection::connection(asio::io_service &io_service, std::string_view target, st
 {
     // TBD
     if (target == "mb_freertos") {
-        m_target = std::make_unique<target_mb_freertos>(*this, 0, nullptr);
+        m_target = std::make_unique<target_mb_freertos>(*this, options);
     } else {
         throw std::system_error(std::make_error_code(std::errc::not_supported), "unknown target");
     }

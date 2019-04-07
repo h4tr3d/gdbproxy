@@ -64,7 +64,7 @@ struct register_stacking
 class target_mb_freertos : public target
 {
 public:
-    target_mb_freertos(connection& conn, int argc, char **argv);
+    target_mb_freertos(connection &conn, const std::vector<char *> &options);
 
 
     // target interface

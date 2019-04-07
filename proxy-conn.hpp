@@ -48,14 +48,15 @@ struct transfer
 };
 
 
-class connection : public std::enable_shared_from_this<connection> {
+class connection : public std::enable_shared_from_this<connection>
+{
 public:
     typedef std::shared_ptr<connection> pointer;
     friend class channel;
 
     static pointer
-    create(asio::io_service &io_service, std::string_view target, std::string_view remote_host, int remote_port) {
-        return pointer(new connection(io_service, target, remote_host, remote_port));
+    create(asio::io_service &io_service, std::string_view target, const std::vector<char*>& options, std::string_view remote_host, int remote_port) {
+        return pointer(new connection(io_service, target, options, remote_host, remote_port));
     }
 
     ~connection() 
@@ -117,7 +118,8 @@ private:
         direction m_dir = requests;
     };
 
-    connection(asio::io_service &io_service, std::string_view target, std::string_view remote_host, int remote_port);
+    connection(asio::io_service &io_service, std::string_view target, const std::vector<char *> &options,
+               std::string_view remote_host, int remote_port);
     
     /// Start connecting to the web-server, initially to resolve the DNS-name of Web server into the IP address
     void start_connect();

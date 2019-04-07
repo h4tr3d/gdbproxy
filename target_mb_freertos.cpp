@@ -241,7 +241,7 @@ static const size_t s_symbols_count = std::size(s_symbols_desc);
 
 static_assert (freertos::Symbol_Count == s_symbols_count, "Wrong count of FreeRTOS symbols");
 
-target_mb_freertos::target_mb_freertos(connection &conn, int argc, char **argv)
+target_mb_freertos::target_mb_freertos(connection &conn, const std::vector<char *> &options)
     : m_conn(conn)
 {
     // Threading will be updated after symbols resolving

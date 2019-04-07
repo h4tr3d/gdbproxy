@@ -36,6 +36,7 @@ int main(int argc, char** argv)
 		string remote_host = result["remote-host"].as<string>();
 
 		string target = argv[1];
+		// now target name is program name
 		argc--;
 		argv++;
 

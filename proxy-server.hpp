@@ -23,5 +23,8 @@ private:
     std::string m_target_name;
     std::string m_remote_host;
     int m_remote_port;
+
+    // non-owned list of target options
+    std::vector<char *> m_target_options;
 };
 

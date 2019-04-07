@@ -11,6 +11,10 @@ server::server(const ios_deque &io_services, std::string_view target, int argc, 
       m_remote_host(remote_host),
       m_remote_port(remote_port)
 {
+    // keep unchanged options list
+    m_target_options.resize(argc);
+    std::copy_n(argv, argc, m_target_options.begin());
+
 	std::cout << endpoint_.address().to_string() << ":" << endpoint_.port() << std::endl;
 //	std::cout << "server::server" << std::endl;
 	start_accept();
@@ -21,7 +25,7 @@ void server::start_accept() {
 	// Round robin.
 	io_services_.push_back(io_services_.front());
 	io_services_.pop_front();
-    connection::pointer new_connection = connection::create(*io_services_.front(), m_target_name,
+    connection::pointer new_connection = connection::create(*io_services_.front(), m_target_name, m_target_options,
                                                             m_remote_host, m_remote_port);
 
 	acceptor_.async_accept(new_connection->socket(), [this, new_connection](const std::error_code& error) {
