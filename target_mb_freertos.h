@@ -3,6 +3,7 @@
 #include "target.h"
 #include "proxy-conn.hpp"
 #include "gdb_packets.h"
+#include "threadid.h"
 
 namespace freertos {
 enum symbols_values
@@ -25,12 +26,8 @@ enum symbols_values
 } // ::freertos
 
 
-// According GDB conventions
-static constexpr threadtcb_t THREAD_ID_ANY     =  0;
-static constexpr threadtcb_t THREAD_ID_ALL     = -1;
 // Internal
-static constexpr threadtcb_t THREAD_ID_INVALID = -2;
-static constexpr threadtcb_t THREAD_ID_CURRENT_EXECUTION = 1;
+static constexpr address_t THREAD_ID_CURRENT_EXECUTION = 1;
 
 // Stacking constants
 enum class stack_growth {
@@ -64,6 +61,9 @@ struct register_stacking
 class target_mb_freertos : public target
 {
 public:
+    // MicroBlaze FreeRTOS 32bit system
+    using tid_t = threadid<uint32_t>;
+
     target_mb_freertos(connection &conn, const std::vector<char *> &options);
 
 
@@ -76,12 +76,11 @@ private:
     bool handle_query_packet(const gdb_packet& pkt);
     bool handle_stop_reply_packets(const gdb_packet& pkt);
 
-    // Utils
-    std::string make_threadid(threadtcb_t tcb);
-    threadtcb_t parse_threadid(std::string_view threadid);
-
     // Processors
     void request_symbol();
+
+    tid_t make_threadid(address_t tcb, address_t pid = 1) const noexcept;
+    tid_t get_threadid(address_t tcb, bool update = true);
 
     //
     // Thread update sequence
@@ -125,8 +124,8 @@ private:
     // Threading
     struct thread_info
     {
-        threadtcb_t thread_tcb = THREAD_ID_INVALID;
-        std::string thread_id;
+        address_t thread_tcb = 0;
+        tid_t thread_id;
         bool exists = false;
         std::string name;
         std::string extra;
@@ -143,8 +142,8 @@ private:
     struct threading
     {
         size_t      threads_count = 0;
-        threadtcb_t current_thread_tcb = THREAD_ID_INVALID;
-        std::string current_thread_id;
+        address_t   current_thread_tcb = 0;
+        tid_t       current_thread_id;
         std::deque<thread_info> info;
 
         std::vector<thread_list> lists;
@@ -153,7 +152,8 @@ private:
         std::function<void()> done_cb;
     };
     threading m_threading;
-    std::string m_current_thread_id;
+    tid_t m_current_thread_id;
+    std::map<address_t, int32_t> m_threads_map;
 
     bool m_multiprocess = false;
 

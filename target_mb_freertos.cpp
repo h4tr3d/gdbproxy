@@ -8,9 +8,6 @@
 
 using namespace std;
 
-static constexpr threadid_t CURRENT_EXECUTION_THREAD_ID = 1u;
-static constexpr threadid_t INVALID_THREAD_ID = 0u;
-
 // Parameters...
 #define POINTER_SIZE             address_t(4)
 #define THREAD_COUNTER_SIZE      address_t(4)
@@ -271,7 +268,7 @@ bool target_mb_freertos::process_request(const gdb_packet &pkt)
             case 'c':
             case 'S':
             case 's':
-            //case '?': // TBD
+            case '?': // TBD
                 return handle_stop_reply_packets(pkt);
 
             case 'v': // series of vXXX packets
@@ -286,11 +283,11 @@ bool target_mb_freertos::process_request(const gdb_packet &pkt)
             // registers read request
             case 'g':
             {
-                clog << "current selected thread: " << m_current_thread_id
-                     << ", current RTOS thread: " << m_threading.current_thread_id
+                clog << "current selected thread: " << m_current_thread_id.to_string()
+                     << ", current RTOS thread: " << m_threading.current_thread_id.to_string()
                      << '\n';
 
-                if (m_current_thread_id == make_threadid(THREAD_ID_CURRENT_EXECUTION)) {
+                if (m_current_thread_id == tid_t(m_multiprocess, 1, THREAD_ID_CURRENT_EXECUTION)) {
                     return false;
                 }
 
@@ -299,7 +296,8 @@ bool target_mb_freertos::process_request(const gdb_packet &pkt)
                         return false;
                     }
 
-                    auto thread_tcb = parse_threadid(m_current_thread_id);
+                    auto tid = tid_t(m_current_thread_id);
+                    auto thread_tcb = tid.tid();
                     if (thread_tcb > THREAD_ID_CURRENT_EXECUTION)
                         return get_thread_reg_list(static_cast<address_t>(thread_tcb));
                 }
@@ -314,13 +312,13 @@ bool target_mb_freertos::process_request(const gdb_packet &pkt)
 
                 auto view = pkt.data().substr(1);
 
-                if (view == make_threadid(THREAD_ID_CURRENT_EXECUTION))
+                if (tid_t(view) == make_threadid(THREAD_ID_CURRENT_EXECUTION))
                     return false;
 
                 auto it = m_threading.info.end();
                 if (m_rtos_avail && m_threading.threads_count) {
                     for (it = m_threading.info.begin(); it != m_threading.info.end(); ++it) {
-                        if (it->thread_id == view && it->exists) {
+                        if (it->thread_id == tid_t(view) && it->exists) {
                             break;
                         }
                     }
@@ -341,8 +339,9 @@ bool target_mb_freertos::process_request(const gdb_packet &pkt)
                 if (pkt.data()[1] == 'g') {
                     bool handled;
                     auto view = pkt.data().substr(2);
-                    m_current_thread_id = string(view);
-                    if (view == make_threadid(THREAD_ID_CURRENT_EXECUTION)) {
+                    m_current_thread_id = tid_t(view);
+                    // temporary hack
+                    if (tid_t(view) == make_threadid(THREAD_ID_CURRENT_EXECUTION) || !m_rtos_avail) {
                         // bypass to target
                         handled = false;
                     } else {
@@ -350,7 +349,7 @@ bool target_mb_freertos::process_request(const gdb_packet &pkt)
                         handled = true;
                     }
 
-                    clog << "thread id: " << view << ", " << m_current_thread_id << '\n';
+                    clog << "thread id: " << view << ", " << m_current_thread_id.to_string() << '\n';
 
                     return handled;
                 }
@@ -386,11 +385,12 @@ bool target_mb_freertos::handle_query_packet(const gdb_packet &pkt)
         if (!m_rtos_avail || !m_threading.threads_count)
             return false;
 
-        auto tid = pkt.data().substr(17);
-        clog << "qThreadEtraInfo thread-id: " << tid << '\n';
+        auto tid_view = pkt.data().substr(17);
+        auto tid = tid_t(tid_view);
+        clog << "qThreadEtraInfo thread-id: " << tid_view << '\n';
 
         // Bypass current execution to the target system
-        if (tid == make_threadid(THREAD_ID_CURRENT_EXECUTION)) {
+        if (tid_t(tid) == make_threadid(THREAD_ID_CURRENT_EXECUTION)) {
             return false;
         }
 
@@ -444,7 +444,8 @@ bool target_mb_freertos::handle_query_packet(const gdb_packet &pkt)
                 // add comma after previous entry
                 if (it != m_threading.info.begin())
                     rep.parse(",", 1);
-                rep.parse(it->thread_id.data(), it->thread_id.size());
+                auto tid_str = it->thread_id.to_string();
+                rep.parse(tid_str.data(), tid_str.size());
             }
         }
         rep.finalize();
@@ -492,7 +493,7 @@ bool target_mb_freertos::handle_query_packet(const gdb_packet &pkt)
         if (!m_rtos_avail)
             return false;
 
-        string rep = "QC" + m_threading.current_thread_id;
+        string rep = "QC" + m_threading.current_thread_id.to_string();
         push_reply(rep.data(), rep.size());
 
         return true;
@@ -593,7 +594,7 @@ bool target_mb_freertos::handle_stop_reply_packets(const gdb_packet &pkt)
 
             while ((end = payload.find(';', start)) != string_view::npos) {
                 if (payload.compare(start, 7, "thread:", 7) == 0) {
-                    string str = "thread:" + m_current_thread_id + ";";
+                    string str = "thread:" + m_current_thread_id.to_string() + ";";
                     new_resp.parse(str.data(), str.size());
                 } else {
                     auto sub = payload.substr(start, end - start + 1);
@@ -670,8 +671,10 @@ void target_mb_freertos::get_current_thread()
         clog << "RTOS current thread: 0x" << hex << val << '\n';
 
         m_threading.current_thread_tcb = val;
-        if (val)
-            m_threading.current_thread_id = make_threadid(threadtcb_t(val));
+        if (val) {
+            //m_threading.current_thread_id = make_threadid(address_t(val));
+            m_threading.current_thread_id = get_threadid(val);
+        }
 
         //if (m_threading.threads_count == 0 || m_threading.current_thread_tcb == 0)
         // always add current execution
@@ -819,7 +822,8 @@ void target_mb_freertos::get_list_elem_thread_id()
         auto& info = m_threading.info.emplace_back();
 
         info.thread_tcb = val;
-        info.thread_id = make_threadid(val);
+        //info.thread_id = make_threadid(val);
+        info.thread_id = get_threadid(val);
 
         get_list_elem_thread_name();
     });
@@ -880,6 +884,22 @@ void target_mb_freertos::update_threads_done()
     clog << "RTOS threads update done... Found " << m_threading.info.size() << " tasks of " << m_threading.threads_count << '\n';
     m_threading.lists.clear();
     m_threading.threads_count = m_threading.info.size();
+
+    // Clean-up
+    for (auto it = m_threads_map.begin(); it != m_threads_map.end();) {
+        bool found = false;
+        for (auto &info : m_threading.info) {
+            if (get<0>(*it) == info.thread_tcb) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            ++it;
+        } else {
+            m_threads_map.erase(it++);
+        }
+    }
 
     if (m_threading.done_cb) {
         m_threading.done_cb();
@@ -979,37 +999,37 @@ void target_mb_freertos::make_empty_threading()
     add_current_execution();
 }
 
-std::string target_mb_freertos::make_threadid(threadtcb_t tcb)
+target_mb_freertos::tid_t target_mb_freertos::make_threadid(address_t tcb, address_t pid) const noexcept
 {
-    // RTOS with multiple processes? Really??? Assume only one process and forman thread-id according GDB thread-id
-    // conventions:
-    //  https://www.sourceware.org/gdb/onlinedocs/gdb.html#thread_002did-syntax
-    // Note, PID and TID - in HEX form. Only one special value: -1 is in decimal one
-    string id = m_multiprocess ? "p1." : "";
-
-    if (tcb < 0) {
-        id += to_string(-1);
-    } else {
-        char buf[sizeof(tcb)*2 + 1]{0};
-        auto size = snprintf(buf, sizeof(buf), "%" PRIx64, tcb);
-        id.append(buf, size_t(size));
-    }
-
-    return id;
+    return {m_multiprocess,
+            static_cast<tid_t::threadid_t>(pid),
+            static_cast<tid_t::threadid_t>(tcb)};
 }
 
-threadtcb_t target_mb_freertos::parse_threadid(std::string_view threadid)
+target_mb_freertos::tid_t target_mb_freertos::get_threadid(address_t tcb, bool update)
 {
-    // skip "p1."
-    auto view = m_multiprocess ? threadid.substr(3) : threadid;
-    try {
-        if (view.at(0) == '-')
-            return THREAD_ID_ALL;
-        string str(view);
-        return static_cast<threadtcb_t>(stoull(str, nullptr, 16));
-    } catch (...) {
-        return THREAD_ID_INVALID;
+    int32_t id = 0;
+    if (auto it = m_threads_map.find(tcb); it == m_threads_map.end()) {
+        // search minimal id
+        int32_t start_id = THREAD_ID_CURRENT_EXECUTION + 1;
+        for (auto& [key, id] : m_threads_map) {
+            if (id != start_id) {
+                id = start_id;
+                break;
+            }
+            ++start_id;
+        }
+        if (id == 0) {
+            id = start_id + 1;
+        }
+    } else {
+        id = std::get<1>(*it);
     }
+
+    if (update)
+        m_threads_map[tcb] = id;
+
+    return make_threadid(id);
 }
 
 

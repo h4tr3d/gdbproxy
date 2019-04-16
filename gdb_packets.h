@@ -7,7 +7,6 @@
 
 using threadid_t = uint64_t;
 using address_t = uint64_t;
-using threadtcb_t = int64_t;
 
 int fromhex (int a);
 uint8_t tohex (uint8_t nib);

@@ -37,7 +37,7 @@ set (SOURCES
   gdb-packet.cpp
   gdb_packets.cpp
   target.cpp
-        target_mb_freertos.cpp)
+        target_mb_freertos.cpp threadid.h)
 
 set (hex2bin_SOURCES hex2bin.cpp gdb_packets.cpp gdb-packet.cpp)
 
