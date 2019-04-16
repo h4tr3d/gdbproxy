@@ -1,6 +1,7 @@
 #include "proxy-conn.hpp"
 
 #include "target_mb_freertos.h"
+#include "target_null.h"
 
 /** 
  * 
@@ -21,6 +22,8 @@ connection::connection(asio::io_service &io_service, std::string_view target, co
     // TBD
     if (target == "mb_freertos") {
         m_target = std::make_unique<target_mb_freertos>(*this, options);
+    } else if (target == "null") {
+        m_target = std::make_unique<target_null>();
     } else {
         throw std::system_error(std::make_error_code(std::errc::not_supported), "unknown target");
     }
