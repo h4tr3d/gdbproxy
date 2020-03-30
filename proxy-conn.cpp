@@ -237,7 +237,13 @@ void connection::channel::start_write(std::shared_ptr<connection> con, transfer 
     auto const& pkt = process_req.pkt;
     auto const total = pkt.raw_data().size();
 
-    asio::async_write(m_dst, asio::buffer(pkt.raw_data()),
+#if ASIO_VERSION > 101200 // 1.12.0
+    auto data = pkt.raw_data();
+#else
+    auto data = std::string(pkt.raw_data());
+#endif
+
+    asio::async_write(m_dst, asio::buffer(data),
                       [con,this,total,&process_req](const std::error_code& ec, size_t transfered) {
                         std::clog << "transfered to " << (m_dir == requests ? "remote" : "client") << ": " << transfered << " / " << total << std::endl;
                         auto const& pkt = process_req.pkt;
